@@ -1,34 +1,35 @@
-import Database from 'better-sqlite3'
+import initSqlJs from 'sql.js'
 import { v4 as uuidv4 } from 'uuid'
-import { fileURLToPath } from 'url'
-import { dirname, join } from 'path'
-import fs from 'fs'
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
+let dbInstance = null
+let SQL = null
 
-const DB_PATH = join(__dirname, '../../data/ace.db')
-
-// Ensure data directory exists
-const dataDir = join(__dirname, '../../data')
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true })
+// Initialize SQL.js
+async function initDB() {
+  if (!SQL) {
+    SQL = await initSqlJs({
+      locateFile: file => `https://sql.js.org/dist/${file}`
+    })
+  }
+  
+  if (!dbInstance) {
+    dbInstance = new SQL.Database()
+    initializeTables(dbInstance)
+  }
+  
+  return dbInstance
 }
 
-let db = null
-
-export function getDB() {
-  if (!db) {
-    db = new Database(DB_PATH)
-    db.pragma('journal_mode = WAL')
-    initializeTables(db)
+export async function getDB() {
+  if (!dbInstance) {
+    await initDB()
   }
-  return db
+  return dbInstance
 }
 
 function initializeTables(database) {
   // Tabela de cidades
-  database.exec(`
+  database.run(`
     CREATE TABLE IF NOT EXISTS cities (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -38,7 +39,7 @@ function initializeTables(database) {
   `)
 
   // Tabela de bairros
-  database.exec(`
+  database.run(`
     CREATE TABLE IF NOT EXISTS neighborhoods (
       id TEXT PRIMARY KEY,
       city_id TEXT NOT NULL,
@@ -51,7 +52,7 @@ function initializeTables(database) {
   `)
 
   // Tabela de RGs (Registro Geográfico - quarteirões)
-  database.exec(`
+  database.run(`
     CREATE TABLE IF NOT EXISTS rgs (
       id TEXT PRIMARY KEY,
       neighborhood_id TEXT NOT NULL,
@@ -67,7 +68,7 @@ function initializeTables(database) {
   `)
 
   // Tabela de imóveis
-  database.exec(`
+  database.run(`
     CREATE TABLE IF NOT EXISTS properties (
       id TEXT PRIMARY KEY,
       rg_id TEXT NOT NULL,
@@ -88,7 +89,7 @@ function initializeTables(database) {
   `)
 
   // Tabela de agentes
-  database.exec(`
+  database.run(`
     CREATE TABLE IF NOT EXISTS agents (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -102,7 +103,7 @@ function initializeTables(database) {
   `)
 
   // Tabela de visitas
-  database.exec(`
+  database.run(`
     CREATE TABLE IF NOT EXISTS visits (
       id TEXT PRIMARY KEY,
       property_id TEXT NOT NULL,
@@ -124,7 +125,7 @@ function initializeTables(database) {
   `)
 
   // Tabela de depósitos (focos)
-  database.exec(`
+  database.run(`
     CREATE TABLE IF NOT EXISTS deposits (
       id TEXT PRIMARY KEY,
       visit_id TEXT NOT NULL,
@@ -142,7 +143,7 @@ function initializeTables(database) {
   `)
 
   // Tabela de ciclos de trabalho
-  database.exec(`
+  database.run(`
     CREATE TABLE IF NOT EXISTS work_cycles (
       id TEXT PRIMARY KEY,
       year INTEGER NOT NULL,
@@ -156,7 +157,7 @@ function initializeTables(database) {
   `)
 
   // Tabela de resumos diários
-  database.exec(`
+  database.run(`
     CREATE TABLE IF NOT EXISTS daily_summaries (
       id TEXT PRIMARY KEY,
       agent_id TEXT NOT NULL,
@@ -176,178 +177,227 @@ function initializeTables(database) {
   `)
 
   // Índices para melhor performance
-  database.exec(`
-    CREATE INDEX IF NOT EXISTS idx_properties_rg ON properties(rg_id);
-    CREATE INDEX IF NOT EXISTS idx_visits_property ON visits(property_id);
-    CREATE INDEX IF NOT EXISTS idx_visits_agent ON visits(agent_id);
-    CREATE INDEX IF NOT EXISTS idx_visits_date ON visits(visit_date);
-    CREATE INDEX IF NOT EXISTS idx_deposits_visit ON deposits(visit_id);
-  `)
+  database.run(`CREATE INDEX IF NOT EXISTS idx_properties_rg ON properties(rg_id);`)
+  database.run(`CREATE INDEX IF NOT EXISTS idx_visits_property ON visits(property_id);`)
+  database.run(`CREATE INDEX IF NOT EXISTS idx_visits_agent ON visits(agent_id);`)
+  database.run(`CREATE INDEX IF NOT EXISTS idx_visits_date ON visits(visit_date);`)
+  database.run(`CREATE INDEX IF NOT EXISTS idx_deposits_visit ON deposits(visit_id);`)
 }
 
 export function closeDB() {
-  if (db) {
-    db.close()
-    db = null
+  if (dbInstance) {
+    dbInstance.close()
+    dbInstance = null
   }
 }
 
-// Funções utilitárias para CRUD
+// Helper functions for database operations
 export const dbHelpers = {
   // Cities
-  createCity(name) {
-    const db = getDB()
+  async createCity(name) {
+    const db = await getDB()
     const id = uuidv4()
-    const stmt = db.prepare('INSERT INTO cities (id, name) VALUES (?, ?)')
-    stmt.run(id, name)
+    db.run('INSERT INTO cities (id, name) VALUES (?, ?)', [id, name])
     return { id, name }
   },
 
-  getAllCities() {
-    const db = getDB()
-    return db.prepare('SELECT * FROM cities ORDER BY name').all()
+  async getAllCities() {
+    const db = await getDB()
+    const stmt = db.prepare('SELECT * FROM cities ORDER BY name')
+    const results = []
+    while (stmt.step()) {
+      const row = stmt.getAsObject()
+      results.push(row)
+    }
+    stmt.free()
+    return results
   },
 
   // Neighborhoods
-  createNeighborhood(cityId, name, code) {
-    const db = getDB()
+  async createNeighborhood(cityId, name, code) {
+    const db = await getDB()
     const id = uuidv4()
-    const stmt = db.prepare('INSERT INTO neighborhoods (id, city_id, name, code) VALUES (?, ?, ?, ?)')
-    stmt.run(id, cityId, name, code)
+    db.run('INSERT INTO neighborhoods (id, city_id, name, code) VALUES (?, ?, ?, ?)', [id, cityId, name, code])
     return { id, city_id: cityId, name, code }
   },
 
-  getNeighborhoodsByCity(cityId) {
-    const db = getDB()
-    return db.prepare('SELECT * FROM neighborhoods WHERE city_id = ? ORDER BY name').all(cityId)
+  async getNeighborhoodsByCity(cityId) {
+    const db = await getDB()
+    const stmt = db.prepare('SELECT * FROM neighborhoods WHERE city_id = ? ORDER BY name')
+    stmt.bind([cityId])
+    const results = []
+    while (stmt.step()) {
+      const row = stmt.getAsObject()
+      results.push(row)
+    }
+    stmt.free()
+    return results
   },
 
   // RGs
-  createRG(neighborhoodId, code, description) {
-    const db = getDB()
+  async createRG(neighborhoodId, code, description) {
+    const db = await getDB()
     const id = uuidv4()
-    const stmt = db.prepare('INSERT INTO rgs (id, neighborhood_id, code, description) VALUES (?, ?, ?, ?)')
-    stmt.run(id, neighborhoodId, code, description)
+    db.run('INSERT INTO rgs (id, neighborhood_id, code, description) VALUES (?, ?, ?, ?)', [id, neighborhoodId, code, description])
     return { id, neighborhood_id: neighborhoodId, code, description }
   },
 
-  getRGsByNeighborhood(neighborhoodId) {
-    const db = getDB()
-    return db.prepare('SELECT * FROM rgs WHERE neighborhood_id = ? ORDER BY code').all(neighborhoodId)
+  async getRGsByNeighborhood(neighborhoodId) {
+    const db = await getDB()
+    const stmt = db.prepare('SELECT * FROM rgs WHERE neighborhood_id = ? ORDER BY code')
+    stmt.bind([neighborhoodId])
+    const results = []
+    while (stmt.step()) {
+      const row = stmt.getAsObject()
+      results.push(row)
+    }
+    stmt.free()
+    return results
   },
 
-  updateRG(id, updates) {
-    const db = getDB()
-    const fields = Object.keys(updates).map(k => `${k} = ?`).join(', ')
-    const values = [...Object.values(updates), id]
-    const stmt = db.prepare(`UPDATE rgs SET ${fields}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
-    stmt.run(...values)
+  async updateRG(id, updates) {
+    const db = await getDB()
+    const fields = Object.keys(updates)
+    const values = Object.values(updates)
+    const setClause = fields.map(k => `${k} = ?`).join(', ')
+    db.run(`UPDATE rgs SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [...values, id])
   },
 
-  deleteRG(id) {
-    const db = getDB()
-    const stmt = db.prepare('DELETE FROM rgs WHERE id = ?')
-    stmt.run(id)
+  async deleteRG(id) {
+    const db = await getDB()
+    db.run('DELETE FROM rgs WHERE id = ?', [id])
   },
 
   // Properties
-  createProperty(rgId, streetName, number, propertyType, residentsCount = 0, dogsCount = 0, catsCount = 0, orderIndex = 0) {
-    const db = getDB()
+  async createProperty(rgId, streetName, number, propertyType, residentsCount = 0, dogsCount = 0, catsCount = 0, orderIndex = 0) {
+    const db = await getDB()
     const id = uuidv4()
-    const stmt = db.prepare(`
+    db.run(`
       INSERT INTO properties (id, rg_id, street_name, number, property_type, residents_count, dogs_count, cats_count, order_index) 
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-    stmt.run(id, rgId, streetName, number, propertyType, residentsCount, dogsCount, catsCount, orderIndex)
+    `, [id, rgId, streetName, number, propertyType, residentsCount, dogsCount, catsCount, orderIndex])
     return { id, rg_id: rgId, street_name: streetName, number, property_type: propertyType, residents_count: residentsCount, dogs_count: dogsCount, cats_count: catsCount, order_index: orderIndex }
   },
 
-  getPropertiesByRG(rgId) {
-    const db = getDB()
-    return db.prepare('SELECT * FROM properties WHERE rg_id = ? ORDER BY order_index, street_name, number').all(rgId)
+  async getPropertiesByRG(rgId) {
+    const db = await getDB()
+    const stmt = db.prepare('SELECT * FROM properties WHERE rg_id = ? ORDER BY order_index, street_name, number')
+    stmt.bind([rgId])
+    const results = []
+    while (stmt.step()) {
+      const row = stmt.getAsObject()
+      results.push(row)
+    }
+    stmt.free()
+    return results
   },
 
-  updateProperty(id, updates) {
-    const db = getDB()
-    const fields = Object.keys(updates).map(k => `${k} = ?`).join(', ')
-    const values = [...Object.values(updates), id]
-    const stmt = db.prepare(`UPDATE properties SET ${fields}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
-    stmt.run(...values)
+  async updateProperty(id, updates) {
+    const db = await getDB()
+    const fields = Object.keys(updates)
+    const values = Object.values(updates)
+    const setClause = fields.map(k => `${k} = ?`).join(', ')
+    db.run(`UPDATE properties SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [...values, id])
   },
 
-  deleteProperty(id) {
-    const db = getDB()
-    const stmt = db.prepare('DELETE FROM properties WHERE id = ?')
-    stmt.run(id)
+  async deleteProperty(id) {
+    const db = await getDB()
+    db.run('DELETE FROM properties WHERE id = ?', [id])
   },
 
-  movePropertyOrder(id, newOrderIndex) {
-    const db = getDB()
-    const stmt = db.prepare('UPDATE properties SET order_index = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-    stmt.run(newOrderIndex, id)
+  async movePropertyOrder(id, newOrderIndex) {
+    const db = await getDB()
+    db.run('UPDATE properties SET order_index = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [newOrderIndex, id])
   },
 
   // Agents
-  createAgent(name, registrationNumber, phone, email) {
-    const db = getDB()
+  async createAgent(name, registrationNumber, phone, email) {
+    const db = await getDB()
     const id = uuidv4()
-    const stmt = db.prepare('INSERT INTO agents (id, name, registration_number, phone, email) VALUES (?, ?, ?, ?, ?)')
-    stmt.run(id, name, registrationNumber, phone, email)
+    db.run('INSERT INTO agents (id, name, registration_number, phone, email) VALUES (?, ?, ?, ?, ?)', [id, name, registrationNumber, phone, email])
     return { id, name, registration_number: registrationNumber, phone, email }
   },
 
-  getAllAgents() {
-    const db = getDB()
-    return db.prepare('SELECT * FROM agents WHERE active = 1 ORDER BY name').all()
+  async getAllAgents() {
+    const db = await getDB()
+    const stmt = db.prepare('SELECT * FROM agents WHERE active = 1 ORDER BY name')
+    const results = []
+    while (stmt.step()) {
+      const row = stmt.getAsObject()
+      results.push(row)
+    }
+    stmt.free()
+    return results
   },
 
   // Visits
-  createVisit(propertyId, agentId, visitDate, visitStatus, eliminatedFoci = 0, treatedFoci = 0, larvicideGrams = 0, guidanceProvided = false, notes) {
-    const db = getDB()
+  async createVisit(propertyId, agentId, visitDate, visitStatus, eliminatedFoci = 0, treatedFoci = 0, larvicideGrams = 0, guidanceProvided = false, notes = '') {
+    const db = await getDB()
     const id = uuidv4()
-    const stmt = db.prepare(`
+    db.run(`
       INSERT INTO visits (id, property_id, agent_id, visit_date, visit_status, eliminated_foci, treated_foci, larvicide_grams, guidance_provided, notes) 
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-    stmt.run(id, propertyId, agentId, visitDate, visitStatus, eliminatedFoci, treatedFoci, larvicideGrams, guidanceProvided ? 1 : 0, notes)
+    `, [id, propertyId, agentId, visitDate, visitStatus, eliminatedFoci, treatedFoci, larvicideGrams, guidanceProvided ? 1 : 0, notes])
     return { id, property_id: propertyId, agent_id: agentId, visit_date: visitDate, visit_status: visitStatus, eliminated_foci: eliminatedFoci, treated_foci: treatedFoci, larvicide_grams: larvicideGrams, guidance_provided: guidanceProvided, notes }
   },
 
-  getVisitsByProperty(propertyId) {
-    const db = getDB()
-    return db.prepare('SELECT * FROM visits WHERE property_id = ? ORDER BY visit_date DESC').all(propertyId)
+  async getVisitsByProperty(propertyId) {
+    const db = await getDB()
+    const stmt = db.prepare('SELECT * FROM visits WHERE property_id = ? ORDER BY visit_date DESC')
+    stmt.bind([propertyId])
+    const results = []
+    while (stmt.step()) {
+      const row = stmt.getAsObject()
+      results.push(row)
+    }
+    stmt.free()
+    return results
   },
 
-  getVisitsByAgentAndDate(agentId, date) {
-    const db = getDB()
-    return db.prepare('SELECT v.*, p.street_name, p.number, p.property_type FROM visits v JOIN properties p ON v.property_id = p.id WHERE v.agent_id = ? AND v.visit_date = ?').all(agentId, date)
+  async getVisitsByAgentAndDate(agentId, date) {
+    const db = await getDB()
+    const stmt = db.prepare('SELECT v.*, p.street_name, p.number, p.property_type FROM visits v JOIN properties p ON v.property_id = p.id WHERE v.agent_id = ? AND v.visit_date = ?')
+    stmt.bind([agentId, date])
+    const results = []
+    while (stmt.step()) {
+      const row = stmt.getAsObject()
+      results.push(row)
+    }
+    stmt.free()
+    return results
   },
 
-  updateVisit(id, updates) {
-    const db = getDB()
-    const fields = Object.keys(updates).map(k => `${k} = ?`).join(', ')
-    const values = [...Object.values(updates), id]
-    const stmt = db.prepare(`UPDATE visits SET ${fields}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
-    stmt.run(...values)
+  async updateVisit(id, updates) {
+    const db = await getDB()
+    const fields = Object.keys(updates)
+    const values = Object.values(updates)
+    const setClause = fields.map(k => `${k} = ?`).join(', ')
+    db.run(`UPDATE visits SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [...values, id])
   },
 
   // Daily Summaries
-  createDailySummary(agentId, summaryDate) {
-    const db = getDB()
+  async createDailySummary(agentId, summaryDate) {
+    const db = await getDB()
     const id = uuidv4()
-    const stmt = db.prepare('INSERT INTO daily_summaries (id, agent_id, summary_date) VALUES (?, ?, ?)')
-    stmt.run(id, agentId, summaryDate)
+    db.run('INSERT INTO daily_summaries (id, agent_id, summary_date) VALUES (?, ?, ?)', [id, agentId, summaryDate])
     return { id, agent_id: agentId, summary_date: summaryDate }
   },
 
-  getDailySummary(agentId, date) {
-    const db = getDB()
-    return db.prepare('SELECT * FROM daily_summaries WHERE agent_id = ? AND summary_date = ?').get(agentId, date)
+  async getDailySummary(agentId, date) {
+    const db = await getDB()
+    const stmt = db.prepare('SELECT * FROM daily_summaries WHERE agent_id = ? AND summary_date = ?')
+    stmt.bind([agentId, date])
+    let result = null
+    if (stmt.step()) {
+      result = stmt.getAsObject()
+    }
+    stmt.free()
+    return result
   },
 
-  updateDailySummaryStats(agentId, date) {
-    const db = getDB()
-    const stmt = db.prepare(`
+  async updateDailySummaryStats(agentId, date) {
+    const db = await getDB()
+    db.run(`
       UPDATE daily_summaries SET
         total_visited = (SELECT COUNT(*) FROM visits WHERE agent_id = ? AND visit_date = ? AND visit_status = 'visited'),
         total_closed = (SELECT COUNT(*) FROM visits WHERE agent_id = ? AND visit_date = ? AND visit_status = 'closed'),
@@ -358,11 +408,10 @@ export const dbHelpers = {
         total_larvicide_grams = (SELECT COALESCE(SUM(larvicide_grams), 0) FROM visits WHERE agent_id = ? AND visit_date = ?),
         updated_at = CURRENT_TIMESTAMP
       WHERE agent_id = ? AND summary_date = ?
-    `)
-    stmt.run(
+    `, [
       agentId, date, agentId, date, agentId, date, agentId, date,
       agentId, date, agentId, date, agentId, date,
       agentId, date
-    )
+    ])
   }
 }

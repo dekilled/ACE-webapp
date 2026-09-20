@@ -1,9 +1,9 @@
 import { dbHelpers } from './database.js'
 
-export function seedDatabase() {
+export async function seedDatabase() {
   try {
     // Verificar se já existem dados
-    const cities = dbHelpers.getAllCities()
+    const cities = await dbHelpers.getAllCities()
     if (cities.length > 0) {
       console.log('Banco de dados já possui dados. Pulando seed.')
       return
@@ -12,21 +12,21 @@ export function seedDatabase() {
     console.log('Iniciando seed do banco de dados...')
 
     // Criar cidade
-    const city = dbHelpers.createCity('São Paulo')
+    const city = await dbHelpers.createCity('São Paulo')
     console.log('Cidade criada:', city.name)
 
     // Criar bairros
-    const neighborhood1 = dbHelpers.createNeighborhood(city.id, 'Centro', '001')
-    const neighborhood2 = dbHelpers.createNeighborhood(city.id, 'Vila Mariana', '002')
-    const neighborhood3 = dbHelpers.createNeighborhood(city.id, 'Pinheiros', '003')
+    const neighborhood1 = await dbHelpers.createNeighborhood(city.id, 'Centro', '001')
+    const neighborhood2 = await dbHelpers.createNeighborhood(city.id, 'Vila Mariana', '002')
+    const neighborhood3 = await dbHelpers.createNeighborhood(city.id, 'Pinheiros', '003')
     console.log('Bairros criados')
 
     // Criar RGs para cada bairro
-    const rg1 = dbHelpers.createRG(neighborhood1.id, '001-01', 'Quarteirão Centro - Rua das Flores')
-    const rg2 = dbHelpers.createRG(neighborhood1.id, '001-02', 'Quarteirão Centro - Av. Principal')
-    const rg3 = dbHelpers.createRG(neighborhood2.id, '002-01', 'Quarteirão Vila Mariana - Rua Augusta')
-    const rg4 = dbHelpers.createRG(neighborhood2.id, '002-02', 'Quarteirão Vila Mariana - Rua da Consolação')
-    const rg5 = dbHelpers.createRG(neighborhood3.id, '003-01', 'Quarteirão Pinheiros - Rua dos Pinheiros')
+    const rg1 = await dbHelpers.createRG(neighborhood1.id, '001-01', 'Quarteirão Centro - Rua das Flores')
+    const rg2 = await dbHelpers.createRG(neighborhood1.id, '001-02', 'Quarteirão Centro - Av. Principal')
+    const rg3 = await dbHelpers.createRG(neighborhood2.id, '002-01', 'Quarteirão Vila Mariana - Rua Augusta')
+    const rg4 = await dbHelpers.createRG(neighborhood2.id, '002-02', 'Quarteirão Vila Mariana - Rua da Consolação')
+    const rg5 = await dbHelpers.createRG(neighborhood3.id, '003-01', 'Quarteirão Pinheiros - Rua dos Pinheiros')
     console.log('RGs criados')
 
     // Criar imóveis para RG1 (25 imóveis - dentro do mínimo)
@@ -40,7 +40,7 @@ export function seedDatabase() {
       const types = ['R', 'R', 'R', 'C', 'R', 'R', 'TB', 'R', 'R', 'PE']
       const type = types[i % types.length]
       
-      dbHelpers.createProperty(
+      await dbHelpers.createProperty(
         rg1.id,
         street,
         number,
@@ -60,7 +60,7 @@ export function seedDatabase() {
       const types = ['R', 'C', 'R', 'R', 'TB', 'R', 'OUT', 'R', 'PE', 'R']
       const type = types[i % types.length]
       
-      dbHelpers.createProperty(
+      await dbHelpers.createProperty(
         rg2.id,
         street,
         number,
@@ -80,7 +80,7 @@ export function seedDatabase() {
       const types = ['R', 'R', 'C', 'R', 'R', 'TB', 'R', 'PE', 'R', 'R']
       const type = types[i % types.length]
       
-      dbHelpers.createProperty(
+      await dbHelpers.createProperty(
         rg3.id,
         street,
         number,
@@ -100,7 +100,7 @@ export function seedDatabase() {
       const types = ['R', 'C', 'R', 'R', 'R', 'TB', 'OUT', 'R', 'R', 'PE']
       const type = types[i % types.length]
       
-      dbHelpers.createProperty(
+      await dbHelpers.createProperty(
         rg4.id,
         street,
         number,
@@ -120,7 +120,7 @@ export function seedDatabase() {
       const types = ['R', 'R', 'C', 'R', 'TB', 'R', 'R', 'PE', 'OUT', 'R']
       const type = types[i % types.length]
       
-      dbHelpers.createProperty(
+      await dbHelpers.createProperty(
         rg5.id,
         street,
         number,
@@ -134,14 +134,14 @@ export function seedDatabase() {
     console.log('Imóveis RG5 criados: 37')
 
     // Criar agentes
-    const agent1 = dbHelpers.createAgent('João Silva', 'ACE001', '(11) 99999-1111', 'joao.silva@saude.gov.br')
-    const agent2 = dbHelpers.createAgent('Maria Santos', 'ACE002', '(11) 99999-2222', 'maria.santos@saude.gov.br')
-    const agent3 = dbHelpers.createAgent('Pedro Oliveira', 'ACE003', '(11) 99999-3333', 'pedro.oliveira@saude.gov.br')
+    const agent1 = await dbHelpers.createAgent('João Silva', 'ACE001', '(11) 99999-1111', 'joao.silva@saude.gov.br')
+    const agent2 = await dbHelpers.createAgent('Maria Santos', 'ACE002', '(11) 99999-2222', 'maria.santos@saude.gov.br')
+    const agent3 = await dbHelpers.createAgent('Pedro Oliveira', 'ACE003', '(11) 99999-3333', 'pedro.oliveira@saude.gov.br')
     console.log('Agentes criados')
 
     // Criar visitas de exemplo para o agente 1 (data de hoje)
     const today = new Date().toISOString().split('T')[0]
-    const properties1 = dbHelpers.getPropertiesByRG(rg1.id)
+    const properties1 = await dbHelpers.getPropertiesByRG(rg1.id)
     
     // Simular visitas em alguns imóveis
     const visitedCount = Math.min(15, properties1.length)
@@ -154,7 +154,7 @@ export function seedDatabase() {
       const treatedFoci = status === 'visited' ? Math.floor(Math.random() * 2) : 0
       const larvicideGrams = treatedFoci > 0 ? (Math.random() * 50 + 10).toFixed(1) : 0
       
-      dbHelpers.createVisit(
+      await dbHelpers.createVisit(
         property.id,
         agent1.id,
         today,
@@ -169,8 +169,8 @@ export function seedDatabase() {
     console.log(`Visitas criadas: ${visitedCount}`)
 
     // Atualizar resumo diário
-    dbHelpers.createDailySummary(agent1.id, today)
-    dbHelpers.updateDailySummaryStats(agent1.id, today)
+    await dbHelpers.createDailySummary(agent1.id, today)
+    await dbHelpers.updateDailySummaryStats(agent1.id, today)
     console.log('Resumo diário atualizado')
 
     console.log('\n✅ Seed completado com sucesso!')
