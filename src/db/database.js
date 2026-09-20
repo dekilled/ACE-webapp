@@ -8,7 +8,7 @@ let SQL = null
 async function initDB() {
   if (!SQL) {
     SQL = await initSqlJs({
-      locateFile: file => `https://sql.js.org/dist/${file}`
+      locateFile: file => `/dist/${file}`
     })
   }
   
